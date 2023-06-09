@@ -12,6 +12,7 @@ import functools
 import logging
 import time
 import warnings
+import collections
 
 try:
     import boto3
@@ -39,6 +40,7 @@ DEFAULT_PORT = 443
 DEFAULT_HOST = 's3.amazonaws.com'
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
+DEFAULT_CHUNK_SIZE = 1<<19
 
 URI_EXAMPLES = (
     's3://my_bucket/my_key',
@@ -51,6 +53,33 @@ _SLEEP_SECONDS = 10
 
 # Returned by AWS when we try to seek beyond EOF.
 _OUT_OF_RANGE = 'InvalidRange'
+
+class _LRUCache:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.cache = collections.OrderedDict()
+
+    def __getitem__(self, key):
+        value = self.cache.pop(key)
+        self.cache[key] = value
+        return value
+
+    def __setitem__(self, key, value):
+        try:
+            self.cache.pop(key)
+        except KeyError:
+            if len(self.cache) >= self.capacity:
+                self.cache.popitem(last=False)
+        self.cache[key] = value
+
+    def __contains__(self, key):
+        return key in self.cache
+
+    def __len__(self):
+        return len(self.cache)
+    
+_lru_cache = _LRUCache(1000)
+_block_size=2 ** 20,
 
 
 class _ClientWrapper:
@@ -321,13 +350,15 @@ def open(
     fileobj.name = key_id
     return fileobj
 
-
 def _get(client, bucket, key, version, range_string):
+    print("range_string", range_string)
     try:
         if version:
             return client.get_object(Bucket=bucket, Key=key, VersionId=version, Range=range_string)
         else:
             return client.get_object(Bucket=bucket, Key=key, Range=range_string)
+            # print("key", key, "x", x)
+            return x
     except botocore.client.ClientError as error:
         wrapped_error = IOError(
             'unable to access bucket: %r key: %r version: %r error: %s' % (
@@ -357,6 +388,7 @@ class _SeekableRawReader(object):
         client,
         bucket,
         key,
+        chunk_size,
         version_id=None,
     ):
         self._client = client
@@ -367,6 +399,15 @@ class _SeekableRawReader(object):
         self._content_length = None
         self._position = 0
         self._body = None
+        self._body_chunks = {}
+        self._lru = _LRUCache(capacity=100)
+
+        self._chunk_size = chunk_size
+
+    def _chunk_pos(self, position):
+        """Return the chunk number for the given position."""
+        return position // self._chunk_size
+
 
     def seek(self, offset, whence=constants.WHENCE_START):
         """Seek to the specified position.
@@ -380,14 +421,6 @@ class _SeekableRawReader(object):
         if whence not in constants.WHENCE_CHOICES:
             raise ValueError('invalid whence, expected one of %r' % constants.WHENCE_CHOICES)
 
-        #
-        # Close old body explicitly.
-        # When first seek() after __init__(), self._body is not exist.
-        #
-        if self._body is not None:
-            self._body.close()
-        self._body = None
-
         start = None
         stop = None
         if whence == constants.WHENCE_START:
@@ -397,7 +430,23 @@ class _SeekableRawReader(object):
         else:
             stop = max(0, -offset)
 
+        if start:
+            chunk_start = self._chunk_pos(start)
+
+        if stop:
+            if self._content_length is not None:
+                chunk_start = self._chunk_pos(self._content_length - stop)
+
         #
+        # Close old body explicitly.
+        # When first seek() after __init__(), self._body is not exist.
+        #
+        # I don't think we actually have to do this because we'll be caching
+        # body requests on a per-position basis
+        # if self._body_chunks[chunk_start]:
+        #     self._body_chunks[chunk_start].close()
+        # self._body_chunks[chunk_start] = None
+
         # If we can figure out that we've read past the EOF, then we can save
         # an extra API call.
         #
@@ -411,7 +460,7 @@ class _SeekableRawReader(object):
             reached_eof = False
 
         if reached_eof:
-            self._body = io.BytesIO()
+            self._body_chunks[self._chunk_pos(self._content_length)] = io.BytesIO()
             self._position = self._content_length
         else:
             self._open_body(start, stop)
@@ -430,7 +479,13 @@ class _SeekableRawReader(object):
         to self._content_length if start is past end of file.
         """
         if start is None and stop is None:
+            # This happens when the first read is called
             start = self._position
+
+        if start is None and stop is not None:
+            if self._content_length is not None:
+                start = max(0, self._content_length - stop)
+
         range_string = smart_open.utils.make_range_string(start, stop)
 
         try:
@@ -448,7 +503,7 @@ class _SeekableRawReader(object):
             if error_response is None or error_response.get('Code') != _OUT_OF_RANGE:
                 raise
             self._position = self._content_length = int(error_response['ActualObjectSize'])
-            self._body = io.BytesIO()
+            self._body_chunks[self._chunk_pos(self._content_length)] = io.BytesIO()
         else:
             #
             # Keep track of how many times boto3's built-in retry mechanism
@@ -464,11 +519,75 @@ class _SeekableRawReader(object):
             units, start, stop, length = smart_open.utils.parse_content_range(response['ContentRange'])
             self._content_length = length
             self._position = start
-            self._body = response['Body']
+
+            # If we were reading from the end and didn't know the content length
+            # we used chunk_pos = -1. Now we have to close it because know the
+            # content length and the chunk_pos
+            if -1 in self._body_chunks and self._body_chunks[-1]:
+                self._body_chunks[-1].close()
+            self._body_chunks[-1] = None
+
+            self._body_chunks[self._chunk_pos(self._position)] = response['Body']
+
+    def _read_chunk(self, f, chunk_pos):
+        """Read a chunk from the specified file handle.
+        
+        Check if the chunk is in the cache first.
+        """
+        # make sure we have data in the cache
+        if chunk_pos in self._lru:
+            data = self._lru[chunk_pos]
+        else:
+            self._lru[chunk_pos] = data = f.read(self._chunk_size)
+
+        return data
+    
+    def _chunked_read(self, f, position, size=None):
+        """Read from the specified file handle in chunks.
+        
+        Check the local cache for a chunk before reading from the remote
+        """
+        print("size", size)
+        if not size:
+            size = self._content_length - position
+
+        print("size 1", size)
+        chunk_pos = self._chunk_pos(position)
+        data = self._read_chunk(f, chunk_pos)
+
+        # Get the part of the chunk that we need to return
+        index = position - (chunk_pos * self._chunk_size)
+        print("position", position, "index:", index, "chunk_start", chunk_pos * self._chunk_size)
+        print("chunk_pos", chunk_pos)
+        to_return = data[index:index+size]
+        print("len to_return", len(to_return))
+
+        # Move on to the next chunk in preparation over iterating over
+        # the remaining chunks necessary to fetch the full chunk
+        chunk_pos += 1
+        position = chunk_pos * self._chunk_size
+
+        while position < self._content_length:
+            remaining_size = size - len(to_return)
+
+            if remaining_size <= 0:
+                return to_return
+            
+            data = self._read_chunk(f, chunk_pos)
+            index = position - (chunk_pos * self._chunk_size)
+            to_return += data[index:index+remaining_size]
+            chunk_pos += 1
+            position = chunk_pos * self._chunk_size        
+            
+        if size:
+            assert len(to_return) == size
+        return to_return
+
+
 
     def read(self, size=-1):
         """Read from the continuous connection with the remote peer."""
-        if self._body is None:
+        if self._body_chunks[self._chunk_pos(self._position)] is None:
             # This is necessary for the very first read() after __init__().
             self._open_body()
         if self._position >= self._content_length:
@@ -487,12 +606,17 @@ class _SeekableRawReader(object):
         # HTTP connection and try again.  Usually, a single retry attempt is
         # enough to recover, but we try multiple times "just in case".
         #
+        print('===================')
+        print("read", self._position, size)
+        print("chunk_pos", self._chunk_pos(self._position))
+
         for attempt, seconds in enumerate([1, 2, 4, 8, 16], 1):
             try:
                 if size == -1:
-                    binary = self._body.read()
+                    binary = self._chunked_read(self._body_chunks[self._chunk_pos(self._position)], self._position)
                 else:
-                    binary = self._body.read(size)
+                    binary = self._chunked_read(self._body_chunks[self._chunk_pos(self._position)], self._position, size)
+
             except (
                 ConnectionResetError,
                 botocore.exceptions.BotoCoreError,
@@ -558,6 +682,7 @@ class Reader(io.BufferedIOBase):
             self._client,
             bucket,
             key,
+            DEFAULT_CHUNK_SIZE,
             self._version_id,
         )
         self._current_pos = 0
