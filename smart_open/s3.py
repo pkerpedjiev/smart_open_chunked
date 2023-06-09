@@ -368,7 +368,7 @@ def _head(client, bucket, key, version):
         raise wrapped_error from error
 
 def _get(client, bucket, key, version, range_string):
-    print("range_string", range_string)
+    # print("range_string", range_string)
     try:
         if version:
             return client.get_object(Bucket=bucket, Key=key, VersionId=version, Range=range_string)
@@ -481,7 +481,7 @@ class _SeekableRawReader(object):
 
         range_string = smart_open.utils.make_range_string(chunk_start, stop)
 
-        print("range_string", range_string)
+        # print("range_string", range_string)
         try:
             # Optimistically try to fetch the requested content range.
             response = _get(
@@ -523,8 +523,10 @@ class _SeekableRawReader(object):
         """
         # make sure we have data in the cache
         if chunk_pos in self._reads:
+            # print(f"HIT: {chunk_pos}")
             return self._reads[chunk_pos]
         else:
+            t1 = time.time()
             response = _get(
                 self._client,
                 self._bucket,
@@ -540,6 +542,7 @@ class _SeekableRawReader(object):
             # Close the stream so that we don't try to read this chunk again
             # and end up with some data from the wrong position
             f.close()
+            print(f"MISSS: {chunk_pos} {time.time() - t1:.1f}")
 
         return data
     
@@ -548,21 +551,21 @@ class _SeekableRawReader(object):
         
         Check the local cache for a chunk before reading from the remote
         """
-        print("size", size)
+        # print("size", size)
         if not size:
             size = self._content_length - position
-        print("size 1", size)
+        # print("size 1", size)
 
         chunk_pos = self._chunk_pos(position)
         data = self._read_chunk(chunk_pos)
         # print("data", data)
-        print("len(data)", len(data))
+        # print("len(data)", len(data))
         # Get the part of the chunk that we need to return
         index = position - (chunk_pos * self._chunk_size)
-        print("position", position, "index:", index, "chunk_start", chunk_pos * self._chunk_size)
-        print("chunk_pos", chunk_pos)
+        # print("position", position, "index:", index, "chunk_start", chunk_pos * self._chunk_size)
+        # print("chunk_pos", chunk_pos)
         to_return = data[index:index+size]
-        print("len to_return", len(to_return))
+        # print("len to_return", len(to_return))
 
         # Move on to the next chunk in preparation over iterating over
         # the remaining chunks necessary to fetch the full chunk
@@ -571,12 +574,12 @@ class _SeekableRawReader(object):
 
         while position < self._content_length:
             remaining_size = size - len(to_return)
-            print("remaining_size", remaining_size)
+            # print("remaining_size", remaining_size)
             if remaining_size <= 0:
-                print('returning"')
+                # print('returning"')
                 return to_return
             
-            print("here")
+            # print("here")
             data = self._read_chunk(chunk_pos)
             index = position - (chunk_pos * self._chunk_size)
             to_return += data[index:index+remaining_size]
@@ -607,9 +610,9 @@ class _SeekableRawReader(object):
         # HTTP connection and try again.  Usually, a single retry attempt is
         # enough to recover, but we try multiple times "just in case".
         #
-        print('===================')
-        print("read", self._position, size)
-        print("chunk_pos", self._chunk_pos(self._position))
+        # print('===================')
+        # print("read", self._position, size)
+        # print("chunk_pos", self._chunk_pos(self._position))
 
         for attempt, seconds in enumerate([1, 2, 4, 8, 16], 1):
             try:            
@@ -618,12 +621,12 @@ class _SeekableRawReader(object):
                 # else:
                 #     binary = self._body_chunks[self._chunk_pos(self._position)].read(size)
 
-                print("xyz", size)
+                # print("xyz", size)
                 if size == -1:
                     binary = self._chunked_read(self._position)
                 else:
                     binary = self._chunked_read(self._position, size)
-                print("binary", binary[:10], binary[-10:])
+                # print("binary", binary[:10], binary[-10:])
             except (
                 ConnectionResetError,
                 botocore.exceptions.BotoCoreError,
