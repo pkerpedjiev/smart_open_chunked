@@ -542,7 +542,7 @@ class _SeekableRawReader(object):
             # Close the stream so that we don't try to read this chunk again
             # and end up with some data from the wrong position
             f.close()
-            print(f"MISSS: {chunk_pos} {time.time() - t1:.1f}")
+            # print(f"MISSS: {chunk_pos} {time.time() - t1:.1f}")
 
         return data
     
