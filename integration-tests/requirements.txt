@@ -1,3 +1,4 @@
 pytest
 pytest_benchmark
 awscli
+diskcache

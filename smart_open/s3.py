@@ -13,6 +13,8 @@ import logging
 import time
 import warnings
 import collections
+import diskcache as dc
+
 
 try:
     import boto3
@@ -41,6 +43,8 @@ DEFAULT_HOST = 's3.amazonaws.com'
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
 DEFAULT_CHUNK_SIZE = 1<<19
+
+DEFAULT_DISKCACHE_SIZE = 1<<30
 
 URI_EXAMPLES = (
     's3://my_bucket/my_key',
@@ -265,6 +269,8 @@ def open(
     client=None,
     client_kwargs=None,
     writebuffer=None,
+    diskcache_dir=None,
+    diskcache_size=None,
 ):
     """Open an S3 object for reading or writing.
 
@@ -308,6 +314,13 @@ def open(
         of in RAM. Use this to keep RAM usage low at the expense of additional
         disk IO. If you pass in an open file, then you are responsible for
         cleaning it up after writing completes.
+    diskcache_dir: str, optional
+        The directory to use for disk caching.  If not specified,
+        no disk cache will be use.
+    diskcache_size: int, optional
+        The maximum size of the disk cache, in bytes.  If not specified,
+        and diskcache_dir is specified, then we'll use the default size of
+        1 gigabyte.
     """
     logger.debug('%r', locals())
     if mode not in constants.BINARY_MODES:
@@ -325,6 +338,8 @@ def open(
             defer_seek=defer_seek,
             client=client,
             client_kwargs=client_kwargs,
+            diskcache_dir=diskcache_dir,
+            diskcache_size=diskcache_size,
         )
     elif mode == constants.WRITE_BINARY:
         if multipart_upload:
@@ -407,6 +422,8 @@ class _SeekableRawReader(object):
         key,
         chunk_size,
         version_id=None,
+        diskcache_dir=None,
+        diskcache_size=None,
     ):
         self._client = client
         self._bucket = bucket
@@ -420,6 +437,18 @@ class _SeekableRawReader(object):
         self._reads = {}
 
         self._chunk_size = chunk_size
+
+        if diskcache_size and not diskcache_dir:
+            raise ValueError("diskcache_size requires diskcache_dir")
+
+        self._diskcache = None
+        if diskcache_dir:
+            if not diskcache_size:
+                logger.info("diskcache_size not specified, using default of 1GB")
+                diskcache_size = DEFAULT_DISKCACHE_SIZE
+            self._diskcache = dc.Cache(diskcache_dir, size_limit=diskcache_size)
+            self._diskcache_hits = 0
+            self._diskcache_misses = 0
 
         # Get the content length right off the bat
         ret = _head(self._client, self._bucket, self._key, self._version_id)
@@ -526,22 +555,36 @@ class _SeekableRawReader(object):
             # print(f"HIT: {chunk_pos}")
             return self._reads[chunk_pos]
         else:
-            t1 = time.time()
-            response = _get(
-                self._client,
-                self._bucket,
-                self._key,
-                self._version_id,
-                smart_open.utils.make_range_string(chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size)
-            )
+            # check if it's in the disk cache
+            cache_key = f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
 
-            f = response['Body']
+            if self._diskcache and cache_key in self._diskcache:
+                self._diskcache_hits += 1
+                self._reads[chunk_pos] = data = self._diskcache[cache_key]
+                return self._diskcache[cache_key]
+            else:
+                t1 = time.time()
+                response = _get(
+                    self._client,
+                    self._bucket,
+                    self._key,
+                    self._version_id,
+                    smart_open.utils.make_range_string(chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size)
+                )
 
-            self._reads[chunk_pos] = data = f.read(self._chunk_size)
+                f = response['Body']
 
-            # Close the stream so that we don't try to read this chunk again
-            # and end up with some data from the wrong position
-            f.close()
+                self._reads[chunk_pos] = data = f.read(self._chunk_size)
+
+                # print("self._diskcache", self._diskcache)
+                if self._diskcache is not None:
+                    # print("saving", cache_key)
+                    self._diskcache_misses += 1
+                    self._diskcache[cache_key] = data
+
+                # Close the stream so that we don't try to read this chunk again
+                # and end up with some data from the wrong position
+                f.close()
             # print(f"MISSS: {chunk_pos} {time.time() - t1:.1f}")
 
         return data
@@ -626,6 +669,7 @@ class _SeekableRawReader(object):
                     binary = self._chunked_read(self._position)
                 else:
                     binary = self._chunked_read(self._position, size)
+
                 # print("binary", binary[:10], binary[-10:])
             except (
                 ConnectionResetError,
@@ -681,6 +725,8 @@ class Reader(io.BufferedIOBase):
         defer_seek=False,
         client=None,
         client_kwargs=None,
+        diskcache_dir=None,
+        diskcache_size=None,
     ):
         self._version_id = version_id
         self._buffer_size = buffer_size
@@ -693,6 +739,8 @@ class Reader(io.BufferedIOBase):
             key,
             DEFAULT_CHUNK_SIZE,
             self._version_id,
+            diskcache_dir=diskcache_dir,
+            diskcache_size=diskcache_size,
         )
         self._current_pos = 0
         self._buffer = smart_open.bytebuffer.ByteBuffer(buffer_size)
