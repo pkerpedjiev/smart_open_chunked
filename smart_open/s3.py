@@ -594,10 +594,14 @@ class _SeekableRawReader(object):
         
         Check the local cache for a chunk before reading from the remote
         """
-        # print("size", size)
-        if not size:
-            size = self._content_length - position
-        # print("size 1", size)
+        # print("position", position, "size", size)
+
+        remaining_size = self._content_length - position
+
+        if not size or size > remaining_size:
+            # The requested chunk boes beyond the end of the file?
+            size = remaining_size
+            # pass
 
         chunk_pos = self._chunk_pos(position)
         data = self._read_chunk(chunk_pos)
@@ -630,7 +634,11 @@ class _SeekableRawReader(object):
             position = chunk_pos * self._chunk_size        
             
         if size:
-            assert len(to_return) == size
+            if len(to_return) != size:
+                raise AssertionError(f"Length of data to be returned ({len(to_return)}) "
+                                    f"does not match requested length ({size}). "
+                                    f"Request at position: {position}. "
+                                    f"Content length: {self._content_length}")
         return to_return
 
 
