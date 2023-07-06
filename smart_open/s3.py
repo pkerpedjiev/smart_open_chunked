@@ -34,29 +34,30 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_PART_SIZE = 50 * 1024**2
 """Default minimum part size for S3 multipart uploads"""
-MIN_MIN_PART_SIZE = 5 * 1024 ** 2
+MIN_MIN_PART_SIZE = 5 * 1024**2
 """The absolute minimum permitted by Amazon."""
 
-SCHEMES = ("s3", "s3n", 's3u', "s3a")
+SCHEMES = ("s3", "s3n", "s3u", "s3a")
 DEFAULT_PORT = 443
-DEFAULT_HOST = 's3.amazonaws.com'
+DEFAULT_HOST = "s3.amazonaws.com"
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
-DEFAULT_CHUNK_SIZE = 1<<19
+DEFAULT_CHUNK_SIZE = 1 << 19
 
-DEFAULT_DISKCACHE_SIZE = 1<<30
+DEFAULT_DISKCACHE_SIZE = 1 << 30
 
 URI_EXAMPLES = (
-    's3://my_bucket/my_key',
-    's3://my_key:my_secret@my_bucket/my_key',
-    's3://my_key:my_secret@my_server:my_port@my_bucket/my_key',
+    "s3://my_bucket/my_key",
+    "s3://my_key:my_secret@my_bucket/my_key",
+    "s3://my_key:my_secret@my_server:my_port@my_bucket/my_key",
 )
 
 _UPLOAD_ATTEMPTS = 6
 _SLEEP_SECONDS = 10
 
 # Returned by AWS when we try to seek beyond EOF.
-_OUT_OF_RANGE = 'InvalidRange'
+_OUT_OF_RANGE = "InvalidRange"
+
 
 class _LRUCache:
     def __init__(self, capacity):
@@ -81,9 +82,10 @@ class _LRUCache:
 
     def __len__(self):
         return len(self.cache)
-    
+
+
 _lru_cache = _LRUCache(1000)
-_block_size=2 ** 20,
+_block_size = (2**20,)
 
 
 class _ClientWrapper:
@@ -96,13 +98,14 @@ class _ClientWrapper:
 
     This wrapper behaves identically to the client otherwise.
     """
+
     def __init__(self, client, kwargs):
         self.client = client
         self.kwargs = kwargs
 
     def __getattr__(self, method_name):
         method = getattr(self.client, method_name)
-        kwargs = self.kwargs.get('S3.Client.%s' % method_name, {})
+        kwargs = self.kwargs.get("S3.Client.%s" % method_name, {})
         return functools.partial(method, **kwargs)
 
 
@@ -138,19 +141,19 @@ def parse_uri(uri_as_string):
     #
     uri = split_uri.netloc + split_uri.path
 
-    if '@' in uri and ':' in uri.split('@')[0]:
-        auth, uri = uri.split('@', 1)
-        access_id, access_secret = auth.split(':')
+    if "@" in uri and ":" in uri.split("@")[0]:
+        auth, uri = uri.split("@", 1)
+        access_id, access_secret = auth.split(":")
 
-    head, key_id = uri.split('/', 1)
-    if '@' in head and ':' in head:
+    head, key_id = uri.split("/", 1)
+    if "@" in head and ":" in head:
         ordinary_calling_format = True
-        host_port, bucket_id = head.split('@')
-        host, port = host_port.split(':', 1)
+        host_port, bucket_id = head.split("@")
+        host, port = host_port.split(":", 1)
         port = int(port)
-    elif '@' in head:
+    elif "@" in head:
         ordinary_calling_format = True
-        host, bucket_id = head.split('@')
+        host, bucket_id = head.split("@")
     else:
         bucket_id = head
 
@@ -183,41 +186,41 @@ def _consolidate_params(uri, transport_params):
 
     def inject(**kwargs):
         try:
-            client_kwargs = transport_params['client_kwargs']
+            client_kwargs = transport_params["client_kwargs"]
         except KeyError:
-            client_kwargs = transport_params['client_kwargs'] = {}
+            client_kwargs = transport_params["client_kwargs"] = {}
 
         try:
-            init_kwargs = client_kwargs['S3.Client']
+            init_kwargs = client_kwargs["S3.Client"]
         except KeyError:
-            init_kwargs = client_kwargs['S3.Client'] = {}
+            init_kwargs = client_kwargs["S3.Client"] = {}
 
         init_kwargs.update(**kwargs)
 
-    client = transport_params.get('client')
-    if client is not None and (uri['access_id'] or uri['access_secret']):
+    client = transport_params.get("client")
+    if client is not None and (uri["access_id"] or uri["access_secret"]):
         logger.warning(
-            'ignoring credentials parsed from URL because they conflict with '
+            "ignoring credentials parsed from URL because they conflict with "
             'transport_params["client"]. Set transport_params["client"] to None '
-            'to suppress this warning.'
+            "to suppress this warning."
         )
         uri.update(access_id=None, access_secret=None)
-    elif (uri['access_id'] and uri['access_secret']):
+    elif uri["access_id"] and uri["access_secret"]:
         inject(
-            aws_access_key_id=uri['access_id'],
-            aws_secret_access_key=uri['access_secret'],
+            aws_access_key_id=uri["access_id"],
+            aws_secret_access_key=uri["access_secret"],
         )
         uri.update(access_id=None, access_secret=None)
 
-    if client is not None and uri['host'] != DEFAULT_HOST:
+    if client is not None and uri["host"] != DEFAULT_HOST:
         logger.warning(
-            'ignoring endpoint_url parsed from URL because they conflict with '
+            "ignoring endpoint_url parsed from URL because they conflict with "
             'transport_params["client"]. Set transport_params["client"] to None '
-            'to suppress this warning.'
+            "to suppress this warning."
         )
         uri.update(host=None)
-    elif uri['host'] != DEFAULT_HOST:
-        inject(endpoint_url='https://%(host)s:%(port)d' % uri)
+    elif uri["host"] != DEFAULT_HOST:
+        inject(endpoint_url="https://%(host)s:%(port)d" % uri)
         uri.update(host=None)
 
     return uri, transport_params
@@ -225,18 +228,18 @@ def _consolidate_params(uri, transport_params):
 
 def open_uri(uri, mode, transport_params):
     deprecated = (
-        'multipart_upload_kwargs',
-        'object_kwargs',
-        'resource',
-        'resource_kwargs',
-        'session',
-        'singlepart_upload_kwargs',
+        "multipart_upload_kwargs",
+        "object_kwargs",
+        "resource",
+        "resource_kwargs",
+        "session",
+        "singlepart_upload_kwargs",
     )
     detected = [k for k in deprecated if k in transport_params]
     if detected:
         doc_url = (
-            'https://github.com/RaRe-Technologies/smart_open/blob/develop/'
-            'MIGRATING_FROM_OLDER_VERSIONS.rst'
+            "https://github.com/RaRe-Technologies/smart_open/blob/develop/"
+            "MIGRATING_FROM_OLDER_VERSIONS.rst"
         )
         #
         # We use warnings.warn /w UserWarning instead of logger.warn here because
@@ -247,14 +250,14 @@ def open_uri(uri, mode, transport_params):
         # https://github.com/RaRe-Technologies/smart_open/issues/614
         #
         message = (
-            'ignoring the following deprecated transport parameters: %r. '
-            'See <%s> for details' % (detected, doc_url)
+            "ignoring the following deprecated transport parameters: %r. "
+            "See <%s> for details" % (detected, doc_url)
         )
         warnings.warn(message, UserWarning)
     parsed_uri = parse_uri(uri)
     parsed_uri, transport_params = _consolidate_params(parsed_uri, transport_params)
     kwargs = smart_open.utils.check_kwargs(open, transport_params)
-    return open(parsed_uri['bucket_id'], parsed_uri['key_id'], mode, **kwargs)
+    return open(parsed_uri["bucket_id"], parsed_uri["key_id"], mode, **kwargs)
 
 
 def open(
@@ -322,9 +325,11 @@ def open(
         and diskcache_dir is specified, then we'll use the default size of
         1 gigabyte.
     """
-    logger.debug('%r', locals())
+    logger.debug("%r", locals())
     if mode not in constants.BINARY_MODES:
-        raise NotImplementedError('bad mode: %r expected one of %r' % (mode, constants.BINARY_MODES))
+        raise NotImplementedError(
+            "bad mode: %r expected one of %r" % (mode, constants.BINARY_MODES)
+        )
 
     if (mode == constants.WRITE_BINARY) and (version_id is not None):
         raise ValueError("version_id must be None when writing")
@@ -360,10 +365,11 @@ def open(
                 writebuffer=writebuffer,
             )
     else:
-        assert False, 'unexpected mode: %r' % mode
+        assert False, "unexpected mode: %r" % mode
 
     fileobj.name = key_id
     return fileobj
+
 
 def _head(client, bucket, key, version):
     """Return the metadata for the specified key."""
@@ -372,30 +378,28 @@ def _head(client, bucket, key, version):
             return client.head_object(Bucket=bucket, Key=key, VersionId=version)
         else:
             return client.head_object(Bucket=bucket, Key=key)
-        
+
     except botocore.client.ClientError as error:
         wrapped_error = IOError(
-            'unable to access bucket: %r key: %r version: %r error: %s' % (
-                bucket, key, version, error
-            )
+            "unable to access bucket: %r key: %r version: %r error: %s"
+            % (bucket, key, version, error)
         )
         wrapped_error.backend_error = error
         raise wrapped_error from error
 
+
 def _get(client, bucket, key, version, range_string):
-    # print("range_string", range_string)
     try:
         if version:
-            return client.get_object(Bucket=bucket, Key=key, VersionId=version, Range=range_string)
+            return client.get_object(
+                Bucket=bucket, Key=key, VersionId=version, Range=range_string
+            )
         else:
             return client.get_object(Bucket=bucket, Key=key, Range=range_string)
-            # print("key", key, "x", x)
-            return x
     except botocore.client.ClientError as error:
         wrapped_error = IOError(
-            'unable to access bucket: %r key: %r version: %r error: %s' % (
-                bucket, key, version, error
-            )
+            "unable to access bucket: %r key: %r version: %r error: %s"
+            % (bucket, key, version, error)
         )
         wrapped_error.backend_error = error
         raise wrapped_error from error
@@ -404,7 +408,7 @@ def _get(client, bucket, key, version, range_string):
 def _unwrap_ioerror(ioe):
     """Given an IOError from _get, return the 'Error' dictionary from boto."""
     try:
-        return ioe.backend_error.response['Error']
+        return ioe.backend_error.response["Error"]
     except (AttributeError, KeyError):
         return None
 
@@ -420,7 +424,7 @@ class _SeekableRawReader(object):
         client,
         bucket,
         key,
-        chunk_size,
+        chunk_size=DEFAULT_CHUNK_SIZE,
         version_id=None,
         diskcache_dir=None,
         diskcache_size=None,
@@ -452,15 +456,11 @@ class _SeekableRawReader(object):
 
         # Get the content length right off the bat
         ret = _head(self._client, self._bucket, self._key, self._version_id)
-        self._content_length = ret['ContentLength']
+        self._content_length = ret["ContentLength"]
 
-        if not self._content_length:
-            raise IOError('Could not retrieve content length for key: %r' % self._key)
-        
     def _chunk_pos(self, position):
         """Return the chunk number for the given position."""
         return position // self._chunk_size
-
 
     def seek(self, offset, whence=constants.WHENCE_START):
         """Seek to the specified position.
@@ -472,14 +472,19 @@ class _SeekableRawReader(object):
         :rtype: int
         """
         if whence not in constants.WHENCE_CHOICES:
-            raise ValueError('invalid whence, expected one of %r' % constants.WHENCE_CHOICES)
+            raise ValueError(
+                "invalid whence, expected one of %r" % constants.WHENCE_CHOICES
+            )
 
         if whence == constants.WHENCE_START:
             self._position = max(0, offset)
         elif whence == constants.WHENCE_CURRENT:
             self._position += offset
         else:
-            self._position = max(0, self._content_length - offset)
+            self._position = max(0, self._content_length + offset)
+
+        if self._position > self._content_length:
+            self._position = self._content_length
 
         return self._position
 
@@ -510,7 +515,6 @@ class _SeekableRawReader(object):
 
         range_string = smart_open.utils.make_range_string(chunk_start, stop)
 
-        # print("range_string", range_string)
         try:
             # Optimistically try to fetch the requested content range.
             response = _get(
@@ -523,9 +527,11 @@ class _SeekableRawReader(object):
         except IOError as ioe:
             # Handle requested content range exceeding content size.
             error_response = _unwrap_ioerror(ioe)
-            if error_response is None or error_response.get('Code') != _OUT_OF_RANGE:
+            if error_response is None or error_response.get("Code") != _OUT_OF_RANGE:
                 raise
-            self._position = self._content_length = int(error_response['ActualObjectSize'])
+            self._position = self._content_length = int(
+                error_response["ActualObjectSize"]
+            )
             self._body_chunks[self._chunk_pos(self._content_length)] = io.BytesIO()
         else:
             #
@@ -535,28 +541,29 @@ class _SeekableRawReader(object):
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/retries.html#checking-retry-attempts-in-an-aws-service-response
             #
             logger.debug(
-                '%s: RetryAttempts: %d',
+                "%s: RetryAttempts: %d",
                 self,
-                response['ResponseMetadata']['RetryAttempts'],
+                response["ResponseMetadata"]["RetryAttempts"],
             )
             # units, start, stop, length = smart_open.utils.parse_content_range(response['ContentRange'])
             # self._content_length = length
             self._position = start
 
-            self._body_chunks[self._chunk_pos(self._position)] = response['Body']
+            self._body_chunks[self._chunk_pos(self._position)] = response["Body"]
 
     def _read_chunk(self, chunk_pos):
         """Read a chunk from the specified file handle.
-        
+
         Check if the chunk is in the cache first.
         """
         # make sure we have data in the cache
         if chunk_pos in self._reads:
-            # print(f"HIT: {chunk_pos}")
             return self._reads[chunk_pos]
         else:
             # check if it's in the disk cache
-            cache_key = f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
+            cache_key = (
+                f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
+            )
 
             if self._diskcache and cache_key in self._diskcache:
                 self._diskcache_hits += 1
@@ -569,33 +576,30 @@ class _SeekableRawReader(object):
                     self._bucket,
                     self._key,
                     self._version_id,
-                    smart_open.utils.make_range_string(chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size)
+                    smart_open.utils.make_range_string(
+                        chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size
+                    ),
                 )
 
-                f = response['Body']
+                f = response["Body"]
 
                 self._reads[chunk_pos] = data = f.read(self._chunk_size)
 
-                # print("self._diskcache", self._diskcache)
                 if self._diskcache is not None:
-                    # print("saving", cache_key)
                     self._diskcache_misses += 1
                     self._diskcache[cache_key] = data
 
                 # Close the stream so that we don't try to read this chunk again
                 # and end up with some data from the wrong position
                 f.close()
-            # print(f"MISSS: {chunk_pos} {time.time() - t1:.1f}")
 
         return data
-    
+
     def _chunked_read(self, position, size=None):
         """Read from the specified file handle in chunks.
-        
+
         Check the local cache for a chunk before reading from the remote
         """
-        # print("position", position, "size", size)
-
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
@@ -605,14 +609,9 @@ class _SeekableRawReader(object):
 
         chunk_pos = self._chunk_pos(position)
         data = self._read_chunk(chunk_pos)
-        # print("data", data)
-        # print("len(data)", len(data))
         # Get the part of the chunk that we need to return
         index = position - (chunk_pos * self._chunk_size)
-        # print("position", position, "index:", index, "chunk_start", chunk_pos * self._chunk_size)
-        # print("chunk_pos", chunk_pos)
-        to_return = data[index:index+size]
-        # print("len to_return", len(to_return))
+        to_return = data[index : index + size]
 
         # Move on to the next chunk in preparation over iterating over
         # the remaining chunks necessary to fetch the full chunk
@@ -621,32 +620,29 @@ class _SeekableRawReader(object):
 
         while position < self._content_length:
             remaining_size = size - len(to_return)
-            # print("remaining_size", remaining_size)
             if remaining_size <= 0:
-                # print('returning"')
                 return to_return
-            
-            # print("here")
+
             data = self._read_chunk(chunk_pos)
             index = position - (chunk_pos * self._chunk_size)
-            to_return += data[index:index+remaining_size]
+            to_return += data[index : index + remaining_size]
             chunk_pos += 1
-            position = chunk_pos * self._chunk_size        
-            
+            position = chunk_pos * self._chunk_size
+
         if size:
             if len(to_return) != size:
-                raise AssertionError(f"Length of data to be returned ({len(to_return)}) "
-                                    f"does not match requested length ({size}). "
-                                    f"Request at position: {position}. "
-                                    f"Content length: {self._content_length}")
+                raise AssertionError(
+                    f"Length of data to be returned ({len(to_return)}) "
+                    f"does not match requested length ({size}). "
+                    f"Request at position: {position}. "
+                    f"Content length: {self._content_length}"
+                )
         return to_return
-
-
 
     def read(self, size=-1):
         """Read from the continuous connection with the remote peer."""
         if self._position >= self._content_length:
-            return b''
+            return b""
 
         #
         # Boto3 has built-in error handling and retry mechanisms:
@@ -660,32 +656,19 @@ class _SeekableRawReader(object):
         # simple to recover from the problem: wait a little bit, reopen the
         # HTTP connection and try again.  Usually, a single retry attempt is
         # enough to recover, but we try multiple times "just in case".
-        #
-        # print('===================')
-        # print("read", self._position, size)
-        # print("chunk_pos", self._chunk_pos(self._position))
-
         for attempt, seconds in enumerate([1, 2, 4, 8, 16], 1):
-            try:            
-                # if size == -1:
-                #     binary = self._body_chunks[self._chunk_pos(self._position)].read()
-                # else:
-                #     binary = self._body_chunks[self._chunk_pos(self._position)].read(size)
-
-                # print("xyz", size)
+            try:
                 if size == -1:
                     binary = self._chunked_read(self._position)
                 else:
                     binary = self._chunked_read(self._position, size)
-
-                # print("binary", binary[:10], binary[-10:])
             except (
                 ConnectionResetError,
                 botocore.exceptions.BotoCoreError,
                 urllib3.exceptions.HTTPError,
             ) as err:
                 logger.warning(
-                    '%s: caught %r while reading %d bytes, sleeping %ds before retry',
+                    "%s: caught %r while reading %d bytes, sleeping %ds before retry",
                     self,
                     err,
                     size,
@@ -696,10 +679,12 @@ class _SeekableRawReader(object):
                 self._position += len(binary)
                 return binary
 
-        raise IOError('%s: failed to read %d bytes after %d attempts' % (self, size, attempt))
+        raise IOError(
+            "%s: failed to read %d bytes after %d attempts" % (self, size, attempt)
+        )
 
     def __str__(self):
-        return 'smart_open.s3._SeekableReader(%r, %r)' % (self._bucket, self._key)
+        return "smart_open.s3._SeekableReader(%r, %r)" % (self._bucket, self._key)
 
 
 def _initialize_boto3(rw, client, client_kwargs, bucket, key):
@@ -709,8 +694,8 @@ def _initialize_boto3(rw, client, client_kwargs, bucket, key):
         client_kwargs = {}
 
     if client is None:
-        init_kwargs = client_kwargs.get('S3.Client', {})
-        client = boto3.client('s3', **init_kwargs)
+        init_kwargs = client_kwargs.get("S3.Client", {})
+        client = boto3.client("s3", **init_kwargs)
     assert client
 
     rw._client = _ClientWrapper(client, client_kwargs)
@@ -728,6 +713,7 @@ class Reader(io.BufferedIOBase):
         bucket,
         key,
         version_id=None,
+        chunk_size=DEFAULT_CHUNK_SIZE,
         buffer_size=DEFAULT_BUFFER_SIZE,
         line_terminator=constants.BINARY_NEWLINE,
         defer_seek=False,
@@ -745,7 +731,7 @@ class Reader(io.BufferedIOBase):
             self._client,
             bucket,
             key,
-            DEFAULT_CHUNK_SIZE,
+            chunk_size,
             self._version_id,
             diskcache_dir=diskcache_dir,
             diskcache_size=diskcache_size,
@@ -778,7 +764,7 @@ class Reader(io.BufferedIOBase):
     def read(self, size=-1):
         """Read up to size bytes from the object and return them."""
         if size == 0:
-            return b''
+            return b""
         elif size < 0:
             # call read() before setting _current_pos to make sure _content_length is set
             out = self._read_from_buffer() + self._raw_reader.read()
@@ -810,13 +796,13 @@ class Reader(io.BufferedIOBase):
         data = self.read(len(b))
         if not data:
             return 0
-        b[:len(data)] = data
+        b[: len(data)] = data
         return len(data)
 
     def readline(self, limit=-1):
         """Read up to and including the next newline.  Returns the bytes read."""
         if limit != -1:
-            raise NotImplementedError('limits other than -1 not implemented yet')
+            raise NotImplementedError("limits other than -1 not implemented yet")
 
         #
         # A single line may span multiple buffers.
@@ -880,7 +866,7 @@ class Reader(io.BufferedIOBase):
         the same S3 object as this instance.
         Changes to the returned object will not affect the current instance.
         """
-        assert resource, 'resource must be a boto3.resource instance'
+        assert resource, "resource must be a boto3.resource instance"
         obj = resource.Object(self._bucket, self._key)
         if self._version_id is not None:
             return obj.Version(self._version_id)
@@ -902,7 +888,7 @@ class Reader(io.BufferedIOBase):
         while len(self._buffer) < size and not self._eof:
             bytes_read = self._buffer.fill(self._raw_reader)
             if bytes_read == 0:
-                logger.debug('%s: reached EOF while filling buffer', self)
+                logger.debug("%s: reached EOF while filling buffer", self)
                 self._eof = True
 
     def __str__(self):
@@ -940,8 +926,10 @@ class MultipartWriter(io.BufferedIOBase):
         writebuffer=None,
     ):
         if min_part_size < MIN_MIN_PART_SIZE:
-            logger.warning("S3 requires minimum part size >= 5MB; \
-multipart upload may fail")
+            logger.warning(
+                "S3 requires minimum part size >= 5MB; \
+multipart upload may fail"
+            )
         self._min_part_size = min_part_size
 
         _initialize_boto3(self, client, client_kwargs, bucket, key)
@@ -952,12 +940,11 @@ multipart upload may fail")
                 Bucket=bucket,
                 Key=key,
             )
-            self._upload_id = _retry_if_failed(partial)['UploadId']
+            self._upload_id = _retry_if_failed(partial)["UploadId"]
         except botocore.client.ClientError as error:
             raise ValueError(
-                'the bucket %r does not exist, or is forbidden for access (%r)' % (
-                    bucket, error
-                )
+                "the bucket %r does not exist, or is forbidden for access (%r)"
+                % (bucket, error)
             ) from error
 
         if writebuffer is None:
@@ -990,10 +977,10 @@ multipart upload may fail")
                 Bucket=self._bucket,
                 Key=self._key,
                 UploadId=self._upload_id,
-                MultipartUpload={'Parts': self._parts},
+                MultipartUpload={"Parts": self._parts},
             )
             _retry_if_failed(partial)
-            logger.debug('%s: completed multipart upload', self)
+            logger.debug("%s: completed multipart upload", self)
         elif self._upload_id:
             #
             # AWS complains with "The XML you provided was not well-formed or
@@ -1011,9 +998,9 @@ multipart upload may fail")
             self._client.put_object(
                 Bucket=self._bucket,
                 Key=self._key,
-                Body=b'',
+                Body=b"",
             )
-            logger.debug('%s: wrote 0 bytes to imitate multipart upload', self)
+            logger.debug("%s: wrote 0 bytes to imitate multipart upload", self)
         self._upload_id = None
 
     @property
@@ -1080,7 +1067,7 @@ multipart upload may fail")
         the same S3 object as this instance.
         Changes to the returned object will not affect the current instance.
         """
-        assert resource, 'resource must be a boto3.resource instance'
+        assert resource, "resource must be a boto3.resource instance"
         return resource.Object(self._bucket, self._key)
 
     #
@@ -1093,7 +1080,7 @@ multipart upload may fail")
             self,
             part_num,
             self._buf.tell(),
-            self._total_bytes / 1024.0 ** 3,
+            self._total_bytes / 1024.0**3,
         )
         self._buf.seek(0)
 
@@ -1114,7 +1101,7 @@ multipart upload may fail")
             )
         )
 
-        self._parts.append({'ETag': upload['ETag'], 'PartNumber': part_num})
+        self._parts.append({"ETag": upload["ETag"], "PartNumber": part_num})
         logger.debug("%s: upload of part_num #%i finished", self, part_num)
 
         self._total_parts += 1
@@ -1163,7 +1150,9 @@ class SinglepartWriter(io.BufferedIOBase):
         try:
             self._client.head_bucket(Bucket=bucket)
         except botocore.client.ClientError as e:
-            raise ValueError('the bucket %r does not exist, or is forbidden for access' % bucket) from e
+            raise ValueError(
+                "the bucket %r does not exist, or is forbidden for access" % bucket
+            ) from e
 
         if writebuffer is None:
             self._buf = io.BytesIO()
@@ -1197,7 +1186,9 @@ class SinglepartWriter(io.BufferedIOBase):
             )
         except botocore.client.ClientError as e:
             raise ValueError(
-                'the bucket %r does not exist, or is forbidden for access' % self._bucket) from e
+                "the bucket %r does not exist, or is forbidden for access"
+                % self._bucket
+            ) from e
 
         logger.debug("%s: direct upload finished", self)
         self._buf = None
@@ -1239,7 +1230,8 @@ class SinglepartWriter(io.BufferedIOBase):
         interface implementation) into the buffer. Content of the buffer will be
         written to S3 on close as a single-part upload.
 
-        For more information about buffers, see https://docs.python.org/3/c-api/buffer.html"""
+        For more information about buffers, see https://docs.python.org/3/c-api/buffer.html
+        """
 
         length = self._buf.write(b)
         self._total_bytes += length
@@ -1262,32 +1254,36 @@ class SinglepartWriter(io.BufferedIOBase):
             self.close()
 
     def __str__(self):
-        return "smart_open.s3.SinglepartWriter(%r, %r)" % (self._object.bucket_name, self._object.key)
+        return "smart_open.s3.SinglepartWriter(%r, %r)" % (
+            self._object.bucket_name,
+            self._object.key,
+        )
 
     def __repr__(self):
-        return "smart_open.s3.SinglepartWriter(bucket=%r, key=%r)" % (self._bucket, self._key)
+        return "smart_open.s3.SinglepartWriter(bucket=%r, key=%r)" % (
+            self._bucket,
+            self._key,
+        )
 
 
 def _retry_if_failed(
-        partial,
-        attempts=_UPLOAD_ATTEMPTS,
-        sleep_seconds=_SLEEP_SECONDS,
-        exceptions=None):
+    partial, attempts=_UPLOAD_ATTEMPTS, sleep_seconds=_SLEEP_SECONDS, exceptions=None
+):
     if exceptions is None:
-        exceptions = (botocore.exceptions.EndpointConnectionError, )
+        exceptions = (botocore.exceptions.EndpointConnectionError,)
     for attempt in range(attempts):
         try:
             return partial()
         except exceptions:
             logger.critical(
-                'Unable to connect to the endpoint. Check your network connection. '
-                'Sleeping and retrying %d more times '
-                'before giving up.' % (attempts - attempt - 1)
+                "Unable to connect to the endpoint. Check your network connection. "
+                "Sleeping and retrying %d more times "
+                "before giving up." % (attempts - attempt - 1)
             )
             time.sleep(sleep_seconds)
     else:
-        logger.critical('Unable to connect to the endpoint. Giving up.')
-        raise IOError('Unable to connect to the endpoint after %d attempts' % attempts)
+        logger.critical("Unable to connect to the endpoint. Giving up.")
+        raise IOError("Unable to connect to the endpoint after %d attempts" % attempts)
 
 
 def _accept_all(key):
@@ -1295,13 +1291,14 @@ def _accept_all(key):
 
 
 def iter_bucket(
-        bucket_name,
-        prefix='',
-        accept_key=None,
-        key_limit=None,
-        workers=16,
-        retries=3,
-        **session_kwargs):
+    bucket_name,
+    prefix="",
+    accept_key=None,
+    key_limit=None,
+    workers=16,
+    retries=3,
+    **session_kwargs,
+):
     """
     Iterate and download all S3 objects under `s3://bucket_name/prefix`.
 
@@ -1367,15 +1364,11 @@ def iter_bucket(
 
     total_size, key_no = 0, -1
     key_iterator = _list_bucket(
-        bucket_name,
-        prefix=prefix,
-        accept_key=accept_key,
-        **session_kwargs)
+        bucket_name, prefix=prefix, accept_key=accept_key, **session_kwargs
+    )
     download_key = functools.partial(
-        _download_key,
-        bucket_name=bucket_name,
-        retries=retries,
-        **session_kwargs)
+        _download_key, bucket_name=bucket_name, retries=retries, **session_kwargs
+    )
 
     with smart_open.concurrency.create_pool(processes=workers) as pool:
         result_iterator = pool.imap_unordered(download_key, key_iterator)
@@ -1386,7 +1379,10 @@ def iter_bucket(
                 if key_no % 1000 == 0:
                     logger.info(
                         "yielding key #%i: %s, size %i (total %.1fMB)",
-                        key_no, key, len(content), total_size / 1024.0 ** 2
+                        key_no,
+                        key,
+                        len(content),
+                        total_size / 1024.0**2,
                     )
                 yield key, content
                 total_size += len(content)
@@ -1399,7 +1395,10 @@ def iter_bucket(
                 # after we listed the contents of the bucket, but before we
                 # downloaded the object.
                 #
-                if not ('Error' in err.response and err.response['Error'].get('Code') == '404'):
+                if not (
+                    "Error" in err.response
+                    and err.response["Error"].get("Code") == "404"
+                ):
                     raise err
             except StopIteration:
                 break
@@ -1407,13 +1406,9 @@ def iter_bucket(
     logger.info("processed %i keys, total size %i" % (key_no + 1, total_size))
 
 
-def _list_bucket(
-        bucket_name,
-        prefix='',
-        accept_key=lambda k: True,
-        **session_kwargs):
+def _list_bucket(bucket_name, prefix="", accept_key=lambda k: True, **session_kwargs):
     session = boto3.session.Session(**session_kwargs)
-    client = session.client('s3')
+    client = session.client("s3")
     ctoken = None
 
     while True:
@@ -1425,28 +1420,28 @@ def _list_bucket(
             kwargs = dict(Bucket=bucket_name, Prefix=prefix)
         response = client.list_objects_v2(**kwargs)
         try:
-            content = response['Contents']
+            content = response["Contents"]
         except KeyError:
             pass
         else:
             for c in content:
-                key = c['Key']
+                key = c["Key"]
                 if accept_key(key):
                     yield key
-        ctoken = response.get('NextContinuationToken', None)
+        ctoken = response.get("NextContinuationToken", None)
         if not ctoken:
             break
 
 
 def _download_key(key_name, bucket_name=None, retries=3, **session_kwargs):
     if bucket_name is None:
-        raise ValueError('bucket_name may not be None')
+        raise ValueError("bucket_name may not be None")
 
     #
     # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/resources.html#multithreading-or-multiprocessing-with-resources
     #
     session = boto3.session.Session(**session_kwargs)
-    s3 = session.resource('s3')
+    s3 = session.resource("s3")
     bucket = s3.Bucket(bucket_name)
 
     # Sometimes, https://github.com/boto/boto/issues/2409 can happen
