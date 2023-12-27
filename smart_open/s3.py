@@ -42,7 +42,7 @@ DEFAULT_PORT = 443
 DEFAULT_HOST = "s3.amazonaws.com"
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
-DEFAULT_CHUNK_SIZE = 1 << 19
+DEFAULT_CHUNK_SIZE = 1 << 20
 
 DEFAULT_DISKCACHE_SIZE = 1 << 30
 
@@ -566,10 +566,12 @@ class _SeekableRawReader(object):
             )
 
             if self._diskcache and cache_key in self._diskcache:
+                print("diskcache hit", chunk_pos)
                 self._diskcache_hits += 1
                 self._reads[chunk_pos] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
+                print("diskcache miss", chunk_pos)
                 t1 = time.time()
                 response = _get(
                     self._client,
@@ -600,6 +602,7 @@ class _SeekableRawReader(object):
 
         Check the local cache for a chunk before reading from the remote
         """
+        # print("chunked_read", position, size)
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
@@ -736,6 +739,8 @@ class Reader(io.BufferedIOBase):
             diskcache_dir=diskcache_dir,
             diskcache_size=diskcache_size,
         )
+        print("discache dir", diskcache_dir)
+        print("diskcache size", diskcache_size)
         self._current_pos = 0
         self._buffer = smart_open.bytebuffer.ByteBuffer(buffer_size)
         self._eof = False
