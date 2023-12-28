@@ -42,7 +42,7 @@ DEFAULT_PORT = 443
 DEFAULT_HOST = "s3.amazonaws.com"
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
-DEFAULT_CHUNK_SIZE = 1 << 20
+DEFAULT_CHUNK_SIZE = 1 << 17
 
 DEFAULT_DISKCACHE_SIZE = 1 << 30
 
@@ -471,6 +471,7 @@ class _SeekableRawReader(object):
         :returns: the position after seeking.
         :rtype: int
         """
+        # print("seek", offset)
         if whence not in constants.WHENCE_CHOICES:
             raise ValueError(
                 "invalid whence, expected one of %r" % constants.WHENCE_CHOICES
@@ -582,7 +583,8 @@ class _SeekableRawReader(object):
                         chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size
                     ),
                 )
-
+                t2 = time.time()
+                print(f"_get time: {t2 - t1:.2f}")
                 f = response["Body"]
 
                 self._reads[chunk_pos] = data = f.read(self._chunk_size)
@@ -768,6 +770,7 @@ class Reader(io.BufferedIOBase):
 
     def read(self, size=-1):
         """Read up to size bytes from the object and return them."""
+        # print("read", size)
         if size == 0:
             return b""
         elif size < 0:
