@@ -447,6 +447,8 @@ class _SeekableRawReader(object):
 
         self._chunk_size = chunk_size
 
+        logger.info("chunk_size: %d", chunk_size)
+
         if diskcache_size and not diskcache_dir:
             raise ValueError("diskcache_size requires diskcache_dir")
         if redis_host and diskcache_dir:
@@ -457,13 +459,18 @@ class _SeekableRawReader(object):
         self._diskcache = None
         self._redis = None
 
+        logger.info("diskcache_dir: %s", diskcache_dir)
+        logger.info("diskcache_size: %s", diskcache_size)
+
         if diskcache_dir:
             if not diskcache_size:
                 logger.info("diskcache_size not specified, using default of 1GB")
                 diskcache_size = DEFAULT_DISKCACHE_SIZE
             self._diskcache = dc.Cache(diskcache_dir, size_limit=diskcache_size)
 
-        print("smart_open redis_host, redis_port:", redis_host, redis_port)
+        logger.info("redis_host: %s", redis_host)
+        logger.info("redis_port: %s", redis_port)
+
         if redis_host:
             if not redis_port:
                 redis_port = 6379
