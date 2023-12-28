@@ -77,9 +77,7 @@ def parse_uri(uri_as_string):
     -----
     smart_open/doctools.py magic goes here
     """
-    print("uri_as_string", uri_as_string)
     scheme = _sniff_scheme(uri_as_string)
-    print("scheme: ", scheme)
     submodule = transport.get_transport(scheme)
     as_dict = submodule.parse_uri(uri_as_string)
 

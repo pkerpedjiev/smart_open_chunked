@@ -14,7 +14,7 @@ import time
 import warnings
 import collections
 import diskcache as dc
-
+import redis
 
 try:
     import boto3
@@ -274,6 +274,8 @@ def open(
     writebuffer=None,
     diskcache_dir=None,
     diskcache_size=None,
+    redis_host=None,
+    redis_port=None
 ):
     """Open an S3 object for reading or writing.
 
@@ -345,6 +347,7 @@ def open(
             client_kwargs=client_kwargs,
             diskcache_dir=diskcache_dir,
             diskcache_size=diskcache_size,
+            redis_host=redis_host
         )
     elif mode == constants.WRITE_BINARY:
         if multipart_upload:
@@ -428,6 +431,8 @@ class _SeekableRawReader(object):
         version_id=None,
         diskcache_dir=None,
         diskcache_size=None,
+        redis_host=None,
+        redis_port=None
     ):
         self._client = client
         self._bucket = bucket
@@ -444,15 +449,26 @@ class _SeekableRawReader(object):
 
         if diskcache_size and not diskcache_dir:
             raise ValueError("diskcache_size requires diskcache_dir")
+        if redis_host and diskcache_dir:
+            raise ValueError("Please specify one but not both of redis_host and diskcache_dir")
 
         self._diskcache = None
+        self._redis = None
+
         if diskcache_dir:
             if not diskcache_size:
                 logger.info("diskcache_size not specified, using default of 1GB")
                 diskcache_size = DEFAULT_DISKCACHE_SIZE
             self._diskcache = dc.Cache(diskcache_dir, size_limit=diskcache_size)
-            self._diskcache_hits = 0
-            self._diskcache_misses = 0
+
+        if redis_host:
+            if not redis_port:
+                redis_port = 6379
+
+            self._redis = redis.Redis(host=redis_host, port=redis_port)
+
+        self._cache_hits = 0
+        self._cache_misses = 0
 
         # Get the content length right off the bat
         ret = _head(self._client, self._bucket, self._key, self._version_id)
@@ -565,14 +581,18 @@ class _SeekableRawReader(object):
             cache_key = (
                 f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
             )
-
-            if self._diskcache and cache_key in self._diskcache:
+            if self._redis and cache_key in self._redis:
+                print("redis hit", chunk_pos)
+                self._cache_hits += 1
+                self._reads[chunk_pos] = data = self._redis.get(cache_key)
+                return data
+            elif self._diskcache and cache_key in self._diskcache:
                 print("diskcache hit", chunk_pos)
-                self._diskcache_hits += 1
+                self._cache_hits += 1
                 self._reads[chunk_pos] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
-                print("diskcache miss", chunk_pos)
+                print("cache miss", chunk_pos)
                 t1 = time.time()
                 response = _get(
                     self._client,
@@ -590,8 +610,11 @@ class _SeekableRawReader(object):
                 self._reads[chunk_pos] = data = f.read(self._chunk_size)
 
                 if self._diskcache is not None:
-                    self._diskcache_misses += 1
+                    self._cache_misses += 1
                     self._diskcache[cache_key] = data
+                if self._redis is not None:
+                    self._cache_misses += 1
+                    self._redis.set(cache_key, data)
 
                 # Close the stream so that we don't try to read this chunk again
                 # and end up with some data from the wrong position
@@ -726,6 +749,8 @@ class Reader(io.BufferedIOBase):
         client_kwargs=None,
         diskcache_dir=None,
         diskcache_size=None,
+        redis_host=None,
+        redis_port=None
     ):
         self._version_id = version_id
         self._buffer_size = buffer_size
@@ -740,6 +765,8 @@ class Reader(io.BufferedIOBase):
             self._version_id,
             diskcache_dir=diskcache_dir,
             diskcache_size=diskcache_size,
+            redis_host=redis_host,
+            redis_port=redis_port
         )
         print("discache dir", diskcache_dir)
         print("diskcache size", diskcache_size)

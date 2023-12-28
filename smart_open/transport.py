@@ -45,10 +45,7 @@ def register_transport(submodule):
     global _REGISTRY, _ERRORS
     module_name = submodule
     if isinstance(submodule, str):
-        try:
-            submodule = importlib.import_module(submodule)
-        except ImportError:
-            return
+        submodule = importlib.import_module(submodule)
     else:
         module_name = submodule.__name__
     # Save only the last module name piece
