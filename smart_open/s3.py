@@ -592,17 +592,17 @@ class _SeekableRawReader(object):
                 f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
             )
             if self._redis and cache_key in self._redis:
-                print("redis hit", chunk_pos)
+                # print("redis hit", chunk_pos)
                 self._cache_hits += 1
                 self._reads[chunk_pos] = data = self._redis.get(cache_key)
                 return data
             elif self._diskcache and cache_key in self._diskcache:
-                print("diskcache hit", chunk_pos)
+                # print("diskcache hit", chunk_pos)
                 self._cache_hits += 1
                 self._reads[chunk_pos] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
-                print("cache miss", chunk_pos)
+                # print("cache miss", chunk_pos)
                 t1 = time.time()
                 response = _get(
                     self._client,
@@ -614,7 +614,7 @@ class _SeekableRawReader(object):
                     ),
                 )
                 t2 = time.time()
-                print(f"_get time: {t2 - t1:.2f}")
+                # print(f"_get time: {t2 - t1:.2f}")
                 f = response["Body"]
 
                 self._reads[chunk_pos] = data = f.read(self._chunk_size)
@@ -778,8 +778,8 @@ class Reader(io.BufferedIOBase):
             redis_host=redis_host,
             redis_port=redis_port,
         )
-        print("discache dir", diskcache_dir)
-        print("diskcache size", diskcache_size)
+        # print("discache dir", diskcache_dir)
+        # print("diskcache size", diskcache_size)
         self._current_pos = 0
         self._buffer = smart_open.bytebuffer.ByteBuffer(buffer_size)
         self._eof = False
