@@ -587,14 +587,16 @@ class _SeekableRawReader(object):
         if chunk_pos in self._reads:
             return self._reads[chunk_pos]
         else:
+            t1 = time.time()
             # check if it's in the disk cache
             cache_key = (
                 f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
             )
             if self._redis and cache_key in self._redis:
-                # print("redis hit", chunk_pos)
                 self._cache_hits += 1
                 self._reads[chunk_pos] = data = self._redis.get(cache_key)
+                t2 = time.time()
+                # print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
                 return data
             elif self._diskcache and cache_key in self._diskcache:
                 # print("diskcache hit", chunk_pos)
@@ -602,8 +604,6 @@ class _SeekableRawReader(object):
                 self._reads[chunk_pos] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
-                # print("cache miss", chunk_pos)
-                t1 = time.time()
                 response = _get(
                     self._client,
                     self._bucket,
@@ -613,8 +613,6 @@ class _SeekableRawReader(object):
                         chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size
                     ),
                 )
-                t2 = time.time()
-                # print(f"_get time: {t2 - t1:.2f}")
                 f = response["Body"]
 
                 self._reads[chunk_pos] = data = f.read(self._chunk_size)
@@ -629,6 +627,8 @@ class _SeekableRawReader(object):
                 # Close the stream so that we don't try to read this chunk again
                 # and end up with some data from the wrong position
                 f.close()
+                t2 = time.time()
+                # print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
 
         return data
 
