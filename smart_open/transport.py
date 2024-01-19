@@ -17,7 +17,7 @@ import smart_open.local_file
 
 logger = logging.getLogger(__name__)
 
-NO_SCHEME = ''
+NO_SCHEME = ""
 
 _REGISTRY = {NO_SCHEME: smart_open.local_file}
 _ERRORS = {}

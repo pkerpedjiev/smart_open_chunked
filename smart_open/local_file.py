@@ -9,15 +9,15 @@
 import io
 import os.path
 
-SCHEME = 'file'
+SCHEME = "file"
 
 URI_EXAMPLES = (
-    './local/path/file',
-    '~/local/path/file',
-    'local/path/file',
-    './local/path/file.gz',
-    'file:///home/user/file',
-    'file:///home/user/file.bz2',
+    "./local/path/file",
+    "~/local/path/file",
+    "local/path/file",
+    "./local/path/file.gz",
+    "file:///home/user/file",
+    "file:///home/user/file.bz2",
 )
 
 
@@ -31,13 +31,13 @@ def parse_uri(uri_as_string):
 
 def open_uri(uri_as_string, mode, transport_params):
     parsed_uri = parse_uri(uri_as_string)
-    fobj = io.open(parsed_uri['uri_path'], mode)
+    fobj = io.open(parsed_uri["uri_path"], mode)
     return fobj
 
 
 def extract_local_path(uri_as_string):
-    if uri_as_string.startswith('file://'):
-        local_path = uri_as_string.replace('file://', '', 1)
+    if uri_as_string.startswith("file://"):
+        local_path = uri_as_string.replace("file://", "", 1)
     else:
         local_path = uri_as_string
     return os.path.expanduser(local_path)

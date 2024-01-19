@@ -29,6 +29,7 @@ import smart_open.concurrency
 import smart_open.utils
 
 from smart_open import constants
+from os import environ
 
 logger = logging.getLogger(__name__)
 
@@ -462,14 +463,17 @@ class _SeekableRawReader(object):
         logger.info("diskcache_dir: %s", diskcache_dir)
         logger.info("diskcache_size: %s", diskcache_size)
 
+        redis_host = redis_host or environ.get("SMART_OPEN_REDIS_HOST")
+        redis_port = redis_port or environ.get("SMART_OPEN_REDIS_PORT")
+
+        logger.info("redis_host: %s", redis_host)
+        logger.info("redis_port: %s", redis_port)
+
         if diskcache_dir:
             if not diskcache_size:
                 logger.info("diskcache_size not specified, using default of 1GB")
                 diskcache_size = DEFAULT_DISKCACHE_SIZE
             self._diskcache = dc.Cache(diskcache_dir, size_limit=diskcache_size)
-
-        logger.info("redis_host: %s", redis_host)
-        logger.info("redis_port: %s", redis_port)
 
         if redis_host:
             if not redis_port:
@@ -778,8 +782,7 @@ class Reader(io.BufferedIOBase):
             redis_host=redis_host,
             redis_port=redis_port,
         )
-        # print("discache dir", diskcache_dir)
-        # print("diskcache size", diskcache_size)
+
         self._current_pos = 0
         self._buffer = smart_open.bytebuffer.ByteBuffer(buffer_size)
         self._eof = False
