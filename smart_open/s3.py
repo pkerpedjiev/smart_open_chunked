@@ -428,7 +428,7 @@ class _SeekableRawReader(object):
         client,
         bucket,
         key,
-        chunk_size=DEFAULT_CHUNK_SIZE,
+        chunk_size=None,
         version_id=None,
         diskcache_dir=None,
         diskcache_size=None,
@@ -446,7 +446,9 @@ class _SeekableRawReader(object):
         self._body_chunks = {}
         self._reads = {}
 
-        self._chunk_size = chunk_size
+        self._chunk_size = chunk_size or int(
+            environ.get("SMART_OPEN_CHUNK_SIZE", DEFAULT_CHUNK_SIZE)
+        )
 
         logger.info("chunk_size: %d", chunk_size)
 
