@@ -245,14 +245,16 @@ class BufferedInputBase(io.BufferedIOBase):
                 data = _get(
                     url=self.url,
                     range=smart_open.utils.make_range_string(
-                        chunk_pos * self._chunk_size, (chunk_pos + 1) * self._chunk_size
+                        chunk_pos * self._chunk_size,
+                        (chunk_pos + 1) * self._chunk_size - 1,
                     ),
                     auth=self.auth,
                     cert=self.cert,
                     headers=self.headers,
                     timeout=self.timeout,
                 )
-
+                # print("chunk_size", self._chunk_size)
+                # print(f"Read: {len(data)}")
                 self._reads[chunk_pos] = data
 
                 if self._diskcache is not None:
