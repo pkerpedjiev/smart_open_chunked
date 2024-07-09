@@ -12,7 +12,6 @@ import functools
 import logging
 import time
 import warnings
-import collections
 import diskcache as dc
 import redis
 
@@ -58,35 +57,6 @@ _SLEEP_SECONDS = 10
 
 # Returned by AWS when we try to seek beyond EOF.
 _OUT_OF_RANGE = "InvalidRange"
-
-
-class _LRUCache:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.cache = collections.OrderedDict()
-
-    def __getitem__(self, key):
-        value = self.cache.pop(key)
-        self.cache[key] = value
-        return value
-
-    def __setitem__(self, key, value):
-        try:
-            self.cache.pop(key)
-        except KeyError:
-            if len(self.cache) >= self.capacity:
-                self.cache.popitem(last=False)
-        self.cache[key] = value
-
-    def __contains__(self, key):
-        return key in self.cache
-
-    def __len__(self):
-        return len(self.cache)
-
-
-_lru_cache = _LRUCache(1000)
-_block_size = (2**20,)
 
 
 class _ClientWrapper:
@@ -328,7 +298,7 @@ def open(
         and diskcache_dir is specified, then we'll use the default size of
         1 gigabyte.
     """
-    logger.debug("%r", locals())
+    # logger.debug("%r", locals())
     if mode not in constants.BINARY_MODES:
         raise NotImplementedError(
             "bad mode: %r expected one of %r" % (mode, constants.BINARY_MODES)
@@ -573,11 +543,11 @@ class _SeekableRawReader(object):
             #
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/retries.html#checking-retry-attempts-in-an-aws-service-response
             #
-            logger.debug(
-                "%s: RetryAttempts: %d",
-                self,
-                response["ResponseMetadata"]["RetryAttempts"],
-            )
+            # logger.debug(
+            #     "%s: RetryAttempts: %d",
+            #     self,
+            #     response["ResponseMetadata"]["RetryAttempts"],
+            # )
             # units, start, stop, length = smart_open.utils.parse_content_range(response['ContentRange'])
             # self._content_length = length
             self._position = start
@@ -591,6 +561,7 @@ class _SeekableRawReader(object):
         """
         # make sure we have data in the cache
         if chunk_pos in self._reads:
+            print("cache hit", chunk_pos)
             return self._reads[chunk_pos]
         else:
             t1 = time.time()
@@ -634,7 +605,7 @@ class _SeekableRawReader(object):
                 # and end up with some data from the wrong position
                 f.close()
                 t2 = time.time()
-                # print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
+                print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
 
         return data
 
@@ -938,7 +909,7 @@ class Reader(io.BufferedIOBase):
         while len(self._buffer) < size and not self._eof:
             bytes_read = self._buffer.fill(self._raw_reader)
             if bytes_read == 0:
-                logger.debug("%s: reached EOF while filling buffer", self)
+                # logger.debug("%s: reached EOF while filling buffer", self)
                 self._eof = True
 
     def __str__(self):
@@ -1030,7 +1001,7 @@ multipart upload may fail"
                 MultipartUpload={"Parts": self._parts},
             )
             _retry_if_failed(partial)
-            logger.debug("%s: completed multipart upload", self)
+            # logger.debug("%s: completed multipart upload", self)
         elif self._upload_id:
             #
             # AWS complains with "The XML you provided was not well-formed or
@@ -1050,7 +1021,7 @@ multipart upload may fail"
                 Key=self._key,
                 Body=b"",
             )
-            logger.debug("%s: wrote 0 bytes to imitate multipart upload", self)
+            # logger.debug("%s: wrote 0 bytes to imitate multipart upload", self)
         self._upload_id = None
 
     @property
