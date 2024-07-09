@@ -224,7 +224,7 @@ class BufferedInputBase(io.BufferedIOBase):
         """
         # make sure we have data in the cache
         if chunk_pos in self._reads:
-            print("cache hit", chunk_pos)
+            # print("cache hit", chunk_pos)
             return self._reads[chunk_pos]
         else:
             t1 = time.time()
@@ -265,7 +265,7 @@ class BufferedInputBase(io.BufferedIOBase):
                 # Close the stream so that we don't try to read this chunk again
                 # and end up with some data from the wrong position
                 t2 = time.time()
-                print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
+                # print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
 
         return data
 
