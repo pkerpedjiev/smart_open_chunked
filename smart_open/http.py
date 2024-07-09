@@ -280,7 +280,7 @@ class BufferedInputBase(io.BufferedIOBase):
 
         Check the local cache for a chunk before reading from the remote
         """
-        # print("chunked_read", position, size)
+        logger.debug(f"chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
