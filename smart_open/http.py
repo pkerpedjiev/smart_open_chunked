@@ -13,6 +13,7 @@ import os.path
 import urllib.parse
 import time
 import urllib3
+from uuid import uuid4
 
 import diskcache as dc
 import redis
@@ -105,7 +106,8 @@ def open(
     unauthenticated, unless set separately in headers.
 
     """
-    print("SMART_OPEN open:", uri)
+    uuid = uuid4()
+    print("SMART_OPEN uuid:", uuid, "open:", uri)
     if mode == constants.READ_BINARY:
         fobj = SeekableBufferedInputBase(
             uri,
@@ -121,6 +123,7 @@ def open(
             diskcache_size=None,
             redis_host=None,
         )
+        fobj.uuid = uuid
         fobj.name = os.path.basename(urllib.parse.urlparse(uri).path)
         return fobj
     else:
@@ -273,7 +276,7 @@ class BufferedInputBase(io.BufferedIOBase):
                 # if random.random() < 0.03:
                 #     1 / 0
                 print(
-                    f"SMART_OPEN cache miss {chunk_pos} cache_size {len(self._reads)} {t2 - t1:.4f}"
+                    f"SMART_OPEN {self.uuid} cache miss {chunk_pos} cache_size {len(self._reads)} {t2 - t1:.4f}"
                 )
 
         return data
