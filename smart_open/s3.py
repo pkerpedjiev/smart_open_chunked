@@ -561,7 +561,7 @@ class _SeekableRawReader(object):
         """
         # make sure we have data in the cache
         if chunk_pos in self._reads:
-            print("cache hit", chunk_pos)
+            # print("cache hit", chunk_pos)
             return self._reads[chunk_pos]
         else:
             t1 = time.time()
@@ -614,7 +614,7 @@ class _SeekableRawReader(object):
 
         Check the local cache for a chunk before reading from the remote
         """
-        logger.debug(f"chunked_read {position} {size}")
+        print(f"{time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:

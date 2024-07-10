@@ -105,6 +105,7 @@ def open(
     unauthenticated, unless set separately in headers.
 
     """
+    print("SMART_OPEN open:", uri)
     if mode == constants.READ_BINARY:
         fobj = SeekableBufferedInputBase(
             uri,
@@ -267,7 +268,13 @@ class BufferedInputBase(io.BufferedIOBase):
                 # Close the stream so that we don't try to read this chunk again
                 # and end up with some data from the wrong position
                 t2 = time.time()
-                # print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
+                # import random
+
+                # if random.random() < 0.03:
+                #     1 / 0
+                print(
+                    f"SMART_OPEN cache miss {chunk_pos} cache_size {len(self._reads)} {t2 - t1:.4f}"
+                )
 
         return data
 
@@ -280,7 +287,7 @@ class BufferedInputBase(io.BufferedIOBase):
 
         Check the local cache for a chunk before reading from the remote
         """
-        logger.debug(f"chunked_read {position} {size}")
+        # print(f"{time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
@@ -486,7 +493,9 @@ class SeekableBufferedInputBase(BufferedInputBase):
         self._read_iter = self.response.iter_content(self.buffer_size)
         self._read_buffer = bytebuffer.ByteBuffer(buffer_size)
         self._position = 0
-        self._reads = {}
+
+        # Create a reasonably sized cache
+        self._reads = smart_open.utils.LRUCache(256)
 
         #
         # This member is part of the io.BufferedIOBase interface.
