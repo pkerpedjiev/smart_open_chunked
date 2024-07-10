@@ -226,24 +226,26 @@ class BufferedInputBase(io.BufferedIOBase):
 
         Check if the chunk is in the cache first.
         """
+        cache_key = f"{self.url}.{self._chunk_size}.{chunk_pos}"
+
         # make sure we have data in the cache
-        if (self.url, chunk_pos) in _reads:
+        if cache_key in _reads:
             # print("cache hit", chunk_pos)
-            return _reads[(self.url, chunk_pos)]
+            return _reads[cache_key]
         else:
             t1 = time.time()
             # check if it's in the disk cache
             cache_key = f"{self.url}.{self._chunk_size}.{chunk_pos}"
             if self._redis and cache_key in self._redis:
                 self._cache_hits += 1
-                _reads[(self.url, chunk_pos)] = data = self._redis.get(cache_key)
+                _reads[cache_key] = data = self._redis.get(cache_key)
                 t2 = time.time()
                 # print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
                 return data
             elif self._diskcache and cache_key in self._diskcache:
                 # print("diskcache hit", chunk_pos)
                 self._cache_hits += 1
-                _reads[(self.url, chunk_pos)] = data = self._diskcache[cache_key]
+                _reads[cache_key] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
                 data = _get(
@@ -259,7 +261,7 @@ class BufferedInputBase(io.BufferedIOBase):
                 )
                 # print("chunk_size", self._chunk_size)
                 # print(f"Read: {len(data)}")
-                _reads[(self.url, chunk_pos)] = data
+                _reads[cache_key] = data
 
                 if self._diskcache is not None:
                     self._cache_misses += 1
@@ -276,7 +278,7 @@ class BufferedInputBase(io.BufferedIOBase):
                 # if random.random() < 0.03:
                 #     1 / 0
                 print(
-                    f"SMART_OPEN {self.uuid} cache miss {chunk_pos} cache_size {len(_reads)} {t2 - t1:.4f}"
+                    f"SMART_OPEN url {self.uuid} cache miss {cache_key} cache_size {len(_reads)} {t2 - t1:.4f}"
                 )
 
         return data

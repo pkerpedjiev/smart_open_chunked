@@ -58,6 +58,9 @@ _SLEEP_SECONDS = 10
 # Returned by AWS when we try to seek beyond EOF.
 _OUT_OF_RANGE = "InvalidRange"
 
+# Create a reasonably sized cache
+_reads = smart_open.utils.LRUCache(1024)
+
 
 class _ClientWrapper:
     """Wraps a client to inject the appropriate keyword args into each method call.
@@ -414,7 +417,6 @@ class _SeekableRawReader(object):
         self._position = 0
         self._body = None
         self._body_chunks = {}
-        self._reads = {}
 
         self._chunk_size = chunk_size or int(
             environ.get("SMART_OPEN_CHUNK_SIZE", DEFAULT_CHUNK_SIZE)
@@ -559,26 +561,25 @@ class _SeekableRawReader(object):
 
         Check if the chunk is in the cache first.
         """
+        cache_key = f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
         # make sure we have data in the cache
-        if chunk_pos in self._reads:
+        if cache_key in _reads:
             # print("cache hit", chunk_pos)
-            return self._reads[chunk_pos]
+            return _reads[cache_key]
         else:
             t1 = time.time()
             # check if it's in the disk cache
-            cache_key = (
-                f"s3://{self._bucket}/{self._key}.{self._chunk_size}.{chunk_pos}"
-            )
+
             if self._redis and cache_key in self._redis:
                 self._cache_hits += 1
-                self._reads[chunk_pos] = data = self._redis.get(cache_key)
+                _reads[cache_key] = data = self._redis.get(cache_key)
                 t2 = time.time()
                 # print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
                 return data
             elif self._diskcache and cache_key in self._diskcache:
                 # print("diskcache hit", chunk_pos)
                 self._cache_hits += 1
-                self._reads[chunk_pos] = data = self._diskcache[cache_key]
+                _reads[cache_key] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
                 response = _get(
@@ -592,7 +593,7 @@ class _SeekableRawReader(object):
                 )
                 f = response["Body"]
 
-                self._reads[chunk_pos] = data = f.read(self._chunk_size)
+                _reads[cache_key] = data = f.read(self._chunk_size)
 
                 if self._diskcache is not None:
                     self._cache_misses += 1
@@ -605,7 +606,7 @@ class _SeekableRawReader(object):
                 # and end up with some data from the wrong position
                 f.close()
                 t2 = time.time()
-                print(f"cache miss {chunk_pos} {t2 - t1:.4f}")
+                print(f"SMART_OPEN: s3 cache miss {cache_key} {t2 - t1:.4f}")
 
         return data
 
@@ -614,7 +615,7 @@ class _SeekableRawReader(object):
 
         Check the local cache for a chunk before reading from the remote
         """
-        print(f"{time.time():.2f} chunked_read {position} {size}")
+        # print(f"{time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
