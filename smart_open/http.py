@@ -107,7 +107,7 @@ def open(
 
     """
     uuid = uuid4()
-    print("SMART_OPEN uuid:", uuid, "open:", uri)
+    print("SMART_OPEN http uuid:", uuid, "open:", uri)
     if mode == constants.READ_BINARY:
         fobj = SeekableBufferedInputBase(
             uri,

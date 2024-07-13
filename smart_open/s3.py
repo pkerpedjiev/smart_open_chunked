@@ -14,6 +14,7 @@ import time
 import warnings
 import diskcache as dc
 import redis
+from uuid import uuid4
 
 try:
     import boto3
@@ -302,6 +303,8 @@ def open(
         1 gigabyte.
     """
     # logger.debug("%r", locals())
+    uuid = uuid4()
+    print("SMART_OPEN s3 uuid:", uuid, "open:", key_id)
     if mode not in constants.BINARY_MODES:
         raise NotImplementedError(
             "bad mode: %r expected one of %r" % (mode, constants.BINARY_MODES)
@@ -344,7 +347,8 @@ def open(
     else:
         assert False, "unexpected mode: %r" % mode
 
-    fileobj.name = key_id
+    fileobj._raw_reader.uuid = uuid
+    fileobj._raw_reader.name = key_id
     return fileobj
 
 
@@ -606,7 +610,9 @@ class _SeekableRawReader(object):
                 # and end up with some data from the wrong position
                 f.close()
                 t2 = time.time()
-                print(f"SMART_OPEN: s3 cache miss {cache_key} {t2 - t1:.4f}")
+                print(
+                    f"SMART_OPEN: s3 {self.uuid} cache miss {cache_key} {t2 - t1:.4f}"
+                )
 
         return data
 
@@ -757,7 +763,7 @@ class Reader(io.BufferedIOBase):
             redis_port=redis_port,
         )
 
-        self._current_pos = 0
+        self._position = 0
         self._buffer = smart_open.bytebuffer.ByteBuffer(buffer_size)
         self._eof = False
         self._line_terminator = line_terminator
