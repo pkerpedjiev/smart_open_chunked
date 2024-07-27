@@ -426,7 +426,7 @@ class _SeekableRawReader(object):
             environ.get("SMART_OPEN_CHUNK_SIZE", DEFAULT_CHUNK_SIZE)
         )
 
-        logger.info("chunk_size: %d", chunk_size)
+        logger.info("chunk_size: %d", self._chunk_size)
 
         if diskcache_size and not diskcache_dir:
             raise ValueError("diskcache_size requires diskcache_dir")
@@ -735,7 +735,7 @@ class Reader(io.BufferedIOBase):
         bucket,
         key,
         version_id=None,
-        chunk_size=DEFAULT_CHUNK_SIZE,
+        chunk_size=None,
         buffer_size=DEFAULT_BUFFER_SIZE,
         line_terminator=constants.BINARY_NEWLINE,
         defer_seek=False,
