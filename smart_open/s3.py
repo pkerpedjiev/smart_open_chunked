@@ -347,8 +347,10 @@ def open(
     else:
         assert False, "unexpected mode: %r" % mode
 
-    fileobj._raw_reader.uuid = uuid
-    fileobj._raw_reader.name = key_id
+    if hasattr(fileobj, "_raw_reader"):
+        fileobj._raw_reader.uuid = uuid
+        fileobj._raw_reader.name = key_id
+
     return fileobj
 
 
