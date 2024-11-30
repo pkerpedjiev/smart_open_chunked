@@ -33,7 +33,7 @@ SCHEMES = ("http", "https")
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CHUNK_SIZE = 1 << 17
+DEFAULT_CHUNK_SIZE = 1 << 19
 
 _HEADERS = {"Accept-Encoding": "identity"}
 """The headers we send to the server with every HTTP request.
@@ -119,9 +119,9 @@ def open(
             cert=cert,
             headers=headers,
             timeout=timeout,
-            diskcache_dir=None,
-            diskcache_size=None,
-            redis_host=None,
+            diskcache_dir=diskcache_dir,
+            diskcache_size=diskcache_size,
+            redis_host=redis_host,
         )
         fobj.uuid = uuid
         fobj.name = os.path.basename(urllib.parse.urlparse(uri).path)
@@ -227,7 +227,6 @@ class BufferedInputBase(io.BufferedIOBase):
         Check if the chunk is in the cache first.
         """
         cache_key = f"{self.url}.{self._chunk_size}.{chunk_pos}"
-
         # make sure we have data in the cache
         if cache_key in _reads:
             # print("cache hit", chunk_pos)
@@ -243,7 +242,6 @@ class BufferedInputBase(io.BufferedIOBase):
                 # print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
                 return data
             elif self._diskcache and cache_key in self._diskcache:
-                # print("diskcache hit", chunk_pos)
                 self._cache_hits += 1
                 _reads[cache_key] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
@@ -265,6 +263,8 @@ class BufferedInputBase(io.BufferedIOBase):
 
                 if self._diskcache is not None:
                     self._cache_misses += 1
+                    print("Writing to diskcache:", cache_key)
+
                     self._diskcache[cache_key] = data
                 if self._redis is not None:
                     self._cache_misses += 1
@@ -292,7 +292,10 @@ class BufferedInputBase(io.BufferedIOBase):
 
         Check the local cache for a chunk before reading from the remote
         """
-        # print(f"{time.time():.2f} chunked_read {position} {size}")
+        self.num_reads += 1
+        # print("num_reads", self.num_reads)
+
+        print(f"{self.num_reads} {time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
@@ -446,7 +449,7 @@ class SeekableBufferedInputBase(BufferedInputBase):
         cert=None,
         headers=None,
         timeout=None,
-        chunk_size=DEFAULT_CHUNK_SIZE,
+        chunk_size=None,
         diskcache_dir=None,
         diskcache_size=None,
         redis_host=None,
@@ -460,6 +463,8 @@ class SeekableBufferedInputBase(BufferedInputBase):
         If none of those are set, will connect unauthenticated.
         """
         self.url = url
+
+        self.num_reads = 0
 
         if kerberos:
             import requests_kerberos

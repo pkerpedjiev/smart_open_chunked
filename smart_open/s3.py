@@ -16,13 +16,11 @@ import diskcache as dc
 import redis
 from uuid import uuid4
 
-try:
-    import boto3
-    import botocore.client
-    import botocore.exceptions
-    import urllib3.exceptions
-except ImportError:
-    MISSING_DEPS = True
+import boto3
+import botocore.client
+import botocore.exceptions
+import urllib3.exceptions
+
 
 import smart_open.bytebuffer
 import smart_open.concurrency
@@ -43,7 +41,7 @@ DEFAULT_PORT = 443
 DEFAULT_HOST = "s3.amazonaws.com"
 
 DEFAULT_BUFFER_SIZE = 128 * 1024
-DEFAULT_CHUNK_SIZE = 1 << 17
+DEFAULT_CHUNK_SIZE = 1 << 19
 
 DEFAULT_DISKCACHE_SIZE = 1 << 30
 
