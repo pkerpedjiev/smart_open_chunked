@@ -295,7 +295,7 @@ class BufferedInputBase(io.BufferedIOBase):
         self.num_reads += 1
         # print("num_reads", self.num_reads)
 
-        print(f"{self.num_reads} {time.time():.2f} chunked_read {position} {size}")
+        # print(f"{self.num_reads} {time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
