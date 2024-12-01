@@ -232,6 +232,8 @@ class BufferedInputBase(io.BufferedIOBase):
             # print("cache hit", chunk_pos)
             return _reads[cache_key]
         else:
+            print("_read_chunk")
+
             t1 = time.time()
             # check if it's in the disk cache
             cache_key = f"{self.url}.{self._chunk_size}.{chunk_pos}"
@@ -239,13 +241,14 @@ class BufferedInputBase(io.BufferedIOBase):
                 self._cache_hits += 1
                 _reads[cache_key] = data = self._redis.get(cache_key)
                 t2 = time.time()
-                # print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
+                print(f"redis hit {chunk_pos} {t2 - t1:.4f}")
                 return data
             elif self._diskcache and cache_key in self._diskcache:
                 self._cache_hits += 1
                 _reads[cache_key] = data = self._diskcache[cache_key]
                 return self._diskcache[cache_key]
             else:
+                print("Getting data")
                 data = _get(
                     url=self.url,
                     range=smart_open.utils.make_range_string(
@@ -295,7 +298,7 @@ class BufferedInputBase(io.BufferedIOBase):
         self.num_reads += 1
         # print("num_reads", self.num_reads)
 
-        # print(f"{self.num_reads} {time.time():.2f} chunked_read {position} {size}")
+        print(f"{self.num_reads} {time.time():.2f} chunked_read {position} {size}")
         remaining_size = self._content_length - position
 
         if not size or size > remaining_size:
